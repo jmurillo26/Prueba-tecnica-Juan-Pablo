@@ -112,3 +112,11 @@ Durante el desarrollo se agregaron mejoras adicionales para mejorar la experienc
 
 ```bash
 git clone https://github.com/jmurillo26/Prueba-tecnica-Juan-Pablo.git
+
+## 1. Instalar dependencias
+    npm install
+
+## 3. Ejecutar el proyecto
+    ng serve
+    
+## 4. Abrir en el navegador
