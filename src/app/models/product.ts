@@ -1,7 +1,6 @@
-
-export interface ProductList{
+export interface ProductList {
   PRODUCTOS: Product[];
-  ALERTA ?: string;
+  ALERTA?: string;
 }
 
 export interface Product {

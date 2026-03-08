@@ -1,7 +1,7 @@
 export interface BillingResponse {
   DETALLES: BillingDetail[];
   FACTURA: BillInfo;
-  ALERTA: string;
+  ALERTA?: string;
 }
 
 export interface BillingDetail {

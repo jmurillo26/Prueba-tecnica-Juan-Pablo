@@ -13,7 +13,8 @@
               type="button"
               class="btn btn-success btn-sm"
               data-bs-toggle="modal"
-              data-bs-target="#exampleModal">
+              data-bs-target="#exampleModal"
+              (click)="resetBillFormState()">
               <i class="bi bi-plus-circle me-1"></i>
               Nueva Factura
             </button>
@@ -93,24 +94,24 @@
           </thead>
 
           <tbody>
-            <tr *ngIf="!billingList || !billingList.DETALLES || billingList.DETALLES.length === 0; else showTable">
+            <tr *ngIf="!billingList?.DETALLES?.length; else showTable">
               <td colspan="6" class="text-center empty-state">
                 No hay líneas registradas para esta factura.
               </td>
             </tr>
 
             <ng-template #showTable>
-              <tr *ngFor="let item of billingList.DETALLES">
+              <tr *ngFor="let item of billingList?.DETALLES || []">
                 <td>{{ item.CODIGO_ARTICULO }}</td>
                 <td>{{ item.ARTICULO }}</td>
                 <td class="text-center">
-                <input
-                  type="number"
-                  class="form-control form-control-sm qty-input"
-                  [value]="item.CANTIDAD"
-                  min="1"
-                  (change)="updateQuantity(item, $event)">
-              </td>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm qty-input"
+                    [value]="item.CANTIDAD"
+                    min="1"
+                    (change)="updateQuantity(item, $event)">
+                </td>
                 <td class="text-end">₡{{ item.PRECIO | number:'1.0-2' }}</td>
                 <td class="text-end fw-semibold">₡{{ item.TOTAL_LINEA | number:'1.0-2' }}</td>
                 <td class="text-center">
@@ -144,7 +145,12 @@
     <div class="modal-content custom-modal">
       <div class="modal-header">
         <h5 class="modal-title" id="exampleModalLabel">Crear Factura</h5>
-        <button type="button" class="btn-close" aria-label="Close" data-bs-dismiss="modal"></button>
+        <button
+          type="button"
+          class="btn-close"
+          aria-label="Close"
+          data-bs-dismiss="modal"
+          (click)="resetBillFormState()"></button>
       </div>
 
       <div class="modal-body">
@@ -154,28 +160,42 @@
           </div>
 
           <div class="form-card-body">
+            <div *ngIf="billModalMessage" class="mb-3">
+              <app-alert [message]="billModalMessage" [type]="billModalAlertType"></app-alert>
+            </div>
+
             <form [formGroup]="formBill">
               <div class="row g-3">
                 <div class="col-md-6">
                   <label for="billNumber" class="form-label">Número de factura</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputmode="numeric"
                     class="form-control"
+                    [class.is-invalid]="(formBill.get('billNumber')?.invalid && formBill.get('billNumber')?.touched) || billNumberAlreadyExists"
                     id="billNumber"
                     formControlName="billNumber"
                     min="1"
-                    step="1">
+                    step="1"
+                    maxlength="10"
+                    (input)="clearBillNumberDuplicateError()">
 
                   <div
                     class="text-danger mt-1"
                     *ngIf="formBill.get('billNumber')?.hasError('required') && formBill.get('billNumber')?.touched">
-                    Es requerido y debe ser un numero entero.
+                    Es requerido y debe ser un número entero.
                   </div>
 
                   <div
                     class="text-danger mt-1"
                     *ngIf="formBill.get('billNumber')?.hasError('pattern') && formBill.get('billNumber')?.touched">
                     El número de factura debe ser un número entero mayor que 0.
+                  </div>
+
+                  <div
+                    class="text-danger mt-1"
+                    *ngIf="formBill.get('billNumber')?.hasError('maxlength') && formBill.get('billNumber')?.touched">
+                    El número de factura no puede tener más de 10 caracteres.
                   </div>
                 </div>
 
@@ -185,19 +205,12 @@
                     type="date"
                     class="form-control"
                     id="date"
-                    formControlName="date"
-                    [max]="maxDate">
+                    formControlName="date">
 
                   <div
                     class="text-danger mt-1"
                     *ngIf="formBill.get('date')?.hasError('required') && formBill.get('date')?.touched">
                     La fecha es requerida.
-                  </div>
-
-                  <div
-                    class="text-danger mt-1"
-                    *ngIf="formBill.get('date')?.value && formBill.get('date')?.value > maxDate && formBill.get('date')?.touched">
-                    No se permiten fechas posteriores al día de hoy.
                   </div>
                 </div>
               </div>
@@ -210,7 +223,8 @@
         <button
           type="button"
           class="btn btn-outline-secondary"
-          data-bs-dismiss="modal">
+          data-bs-dismiss="modal"
+          (click)="resetBillFormState()">
           Cancelar
         </button>
 

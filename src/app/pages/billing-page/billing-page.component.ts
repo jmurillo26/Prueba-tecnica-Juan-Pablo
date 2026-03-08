@@ -1,34 +1,59 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
+
+import { BillingDetail, BillingResponse } from './../../models/billing';
+import { BillOperationResponse } from './../../models/BillOperationResponse';
 import { ProductList } from './../../models/product';
 import { BillingService } from './../../services/billing.service';
-import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { BillingResponse } from './../../models/billing';
 
 declare var window: any;
+
+interface ApiErrorBody {
+  ALERTA?: string;
+  message?: string;
+}
 
 @Component({
   selector: 'app-billing-page',
   templateUrl: './billing-page.component.html',
   styleUrls: ['./billing-page.component.css'],
 })
-export class BillingPageComponent implements OnInit {
-  formBill!: FormGroup;
-  formDetail!: FormGroup;
-  sendBill: string = '';
-  sendDate: string = '';
-  productList!: ProductList;
-  billingList!: BillingResponse;
-  message: string = '';
+export class BillingPageComponent implements OnInit, OnDestroy {
+  formBill: FormGroup;
+  formDetail: FormGroup;
+
+  sendBill = '';
+  sendDate = '';
+  total = 0;
+
+  productList?: ProductList;
+  billingList?: BillingResponse;
+
+  message = '';
   alertType: 'success' | 'danger' | 'warning' | 'info' = 'info';
-  total: number = 0;
-  maxDate: string = '';
+
+  billModalMessage = '';
+  billModalAlertType: 'success' | 'danger' | 'warning' | 'info' = 'danger';
+  billNumberAlreadyExists = false;
+
+  private readonly destroy$ = new Subject<void>();
 
   constructor(
     private formBuilder: FormBuilder,
     private billingService: BillingService
   ) {
     this.formBill = this.formBuilder.group({
-      billNumber: ['', [Validators.required, Validators.pattern('^[1-9][0-9]*$')]],
+      billNumber: [
+        '',
+        [
+          Validators.required,
+          Validators.pattern('^[1-9][0-9]*$'),
+          Validators.maxLength(10),
+        ],
+      ],
       date: ['', Validators.required],
     });
 
@@ -39,13 +64,19 @@ export class BillingPageComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.maxDate = new Date().toISOString().split('T')[0];
     this.getProductList();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   private closeModal(modalId: string): void {
     const modalElement = document.getElementById(modalId);
-    if (!modalElement) return;
+    if (!modalElement) {
+      return;
+    }
 
     const modalInstance =
       window.bootstrap?.Modal.getInstance(modalElement) ||
@@ -54,10 +85,44 @@ export class BillingPageComponent implements OnInit {
     modalInstance.hide();
   }
 
-  private resetBillFormState(): void {
+  private getErrorMessage(
+    error: HttpErrorResponse,
+    defaultMessage: string
+  ): string {
+    const headerError =
+      error.headers?.get('errordescription') ||
+      error.headers?.get('statustext') ||
+      error.statusText;
+
+    const errorBody = error.error as ApiErrorBody | string | null;
+
+    const backendAlert =
+      typeof errorBody === 'object' && errorBody ? errorBody.ALERTA : '';
+
+    const backendMessage =
+      typeof errorBody === 'object' && errorBody ? errorBody.message : '';
+
+    const rawError = typeof errorBody === 'string' ? errorBody : '';
+    const clientMessage = error.message;
+
+    return (
+      headerError ||
+      backendAlert ||
+      backendMessage ||
+      rawError ||
+      clientMessage ||
+      defaultMessage
+    );
+  }
+
+  public resetBillFormState(): void {
     this.formBill.reset();
     this.formBill.markAsPristine();
     this.formBill.markAsUntouched();
+
+    this.billModalMessage = '';
+    this.billModalAlertType = 'danger';
+    this.billNumberAlreadyExists = false;
   }
 
   private resetDetailFormState(): void {
@@ -66,297 +131,280 @@ export class BillingPageComponent implements OnInit {
     this.formDetail.markAsUntouched();
   }
 
+  public clearBillNumberDuplicateError(): void {
+    this.billNumberAlreadyExists = false;
+    this.billModalMessage = '';
+  }
+
   public save(): void {
+    this.billModalMessage = '';
+    this.billModalAlertType = 'danger';
+    this.billNumberAlreadyExists = false;
+
     if (this.formBill.invalid) {
       this.formBill.markAllAsTouched();
       return;
     }
 
     this.sendBill = String(this.formBill.get('billNumber')?.value || '');
-    this.sendDate = this.formBill.get('date')?.value || '';
+    this.sendDate = String(this.formBill.get('date')?.value || '');
 
-    if (this.sendDate > this.maxDate) {
-      this.formBill.get('date')?.markAsTouched();
-      this.alertType = 'warning';
-      this.message = 'No se pueden crear facturas con una fecha futura.';
-      return;
-    }
+    this.billingService
+      .createBill(this.sendBill, this.sendDate)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res: BillOperationResponse) => {
+          this.alertType = 'success';
+          this.message = res.ALERTA || 'Factura creada correctamente';
 
-    this.billingService.createBill(this.sendBill, this.sendDate).subscribe({
-      next: (res: any) => {
-        this.alertType = 'success';
-        this.message = res.ALERTA || 'Factura creada correctamente';
-        this.getBillingList();
-        this.resetBillFormState();
-        this.closeModal('exampleModal');
-      },
-      error: (error) => {
-        console.error('ERROR COMPLETO:', error);
+          this.getBillingList();
+          this.resetBillFormState();
+          this.closeModal('exampleModal');
+        },
+        error: (error: HttpErrorResponse) => {
+          console.error('ERROR COMPLETO:', error);
 
-        this.alertType = 'danger';
+          const finalMessage = this.getErrorMessage(
+            error,
+            'Error al crear factura'
+          );
 
-        const headerMessage =
-          error?.headers?.get('errordescription') ||
-          error?.headers?.get('statustext') ||
-          error?.statusText;
+          if (finalMessage.toLowerCase().includes('ya existe')) {
+            this.billModalAlertType = 'danger';
+            this.billModalMessage = `La factura #${this.sendBill} ya existe. Intenta con otro número.`;
+            this.billNumberAlreadyExists = true;
+            this.formBill.get('billNumber')?.markAsTouched();
+            return;
+          }
 
-        const backendMessage =
-          headerMessage ||
-          error?.error?.ALERTA ||
-          error?.error?.message ||
-          (typeof error?.error === 'string' ? error.error : '') ||
-          error?.message ||
-          'Error al crear factura';
-
-        const normalizedMessage = String(backendMessage).toLowerCase();
-
-        if (normalizedMessage.includes('ya existe')) {
-          this.message = `La factura #${this.sendBill} ya existe. Intenta con otro número.`;
-          return;
-        }
-
-        this.message = backendMessage;
-      },
-    });
+          this.billModalAlertType = 'danger';
+          this.billModalMessage = finalMessage;
+        },
+      });
   }
 
   public getProductList(): void {
-    this.billingService.getProductList().subscribe({
-      next: (res: ProductList) => {
-        this.productList = res;
-      },
-      error: (error) => {
-        console.error(error);
-        this.alertType = 'danger';
-
-        const headerMessage =
-          error?.headers?.get('errordescription') ||
-          error?.headers?.get('statustext') ||
-          error?.statusText;
-
-        this.message =
-          headerMessage ||
-          error?.error?.ALERTA ||
-          error?.error?.message ||
-          (typeof error?.error === 'string' ? error.error : '') ||
-          error?.message ||
-          'Error al traer los productos';
-      },
-    });
+    this.billingService
+      .getProductList()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res: ProductList) => {
+          this.productList = res;
+        },
+        error: (error: HttpErrorResponse) => {
+          console.error(error);
+          this.alertType = 'danger';
+          this.message = this.getErrorMessage(
+            error,
+            'Error al traer los productos'
+          );
+        },
+      });
   }
 
   public sendNewLine(): void {
-  if (!this.sendBill) {
-    this.alertType = 'warning';
-    this.message = 'Primero debes crear una factura antes de agregar una línea.';
-    return;
+    if (!this.validateDetailBeforeSave()) {
+      return;
+    }
+
+    const qty = this.getDetailQty();
+    const code = this.getDetailArticleCode();
+    const existingLine = this.findExistingLine(code);
+
+    if (existingLine) {
+      this.updateExistingLineQuantity(existingLine, qty, code);
+      return;
+    }
+
+    this.createDetailLine(code, qty);
   }
 
-  if (this.formDetail.invalid) {
-    this.formDetail.markAllAsTouched();
-    return;
+  private validateDetailBeforeSave(): boolean {
+    if (!this.sendBill) {
+      this.alertType = 'warning';
+      this.message = 'Primero debes crear una factura antes de agregar una línea.';
+      return false;
+    }
+
+    if (this.formDetail.invalid) {
+      this.formDetail.markAllAsTouched();
+      return false;
+    }
+
+    return true;
   }
 
-  const qty = Number(this.formDetail.get('qty')?.value);
-  const code = this.formDetail.get('articleCode')?.value;
+  private getDetailQty(): number {
+    return Number(this.formDetail.get('qty')?.value);
+  }
 
-  const existingLine = this.billingList?.DETALLES?.find(
-    (item) => item.CODIGO_ARTICULO === code
-  );
+  private getDetailArticleCode(): string {
+    return String(this.formDetail.get('articleCode')?.value || '');
+  }
 
-  if (existingLine) {
+  private findExistingLine(code: string): BillingDetail | undefined {
+    return this.billingList?.DETALLES?.find(
+      (item: BillingDetail) => item.CODIGO_ARTICULO === code
+    );
+  }
+
+  private createDetailLine(code: string, qty: number): void {
+    this.billingService
+      .createNewLine(this.sendBill, code, qty)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res: BillOperationResponse) => {
+          this.alertType = 'success';
+          this.message = res.ALERTA || 'Línea agregada correctamente';
+          this.handleDetailSuccess();
+        },
+        error: (error: HttpErrorResponse) => {
+          console.error(error);
+          this.alertType = 'danger';
+          this.message = this.getErrorMessage(error, 'Error al crear la línea');
+        },
+      });
+  }
+
+  private updateExistingLineQuantity(
+    existingLine: BillingDetail,
+    qty: number,
+    code: string
+  ): void {
     const newQty = Number(existingLine.CANTIDAD) + qty;
 
-    this.billingService.removeNewLine(existingLine.LINEA, this.sendBill).subscribe({
+    this.deleteDetailLine(existingLine.LINEA).subscribe({
       next: () => {
-        this.billingService.createNewLine(this.sendBill, code, newQty).subscribe({
-          next: (res: any) => {
-            this.getBillingList();
-            this.resetDetailFormState();
-            this.closeModal('exampleModal2');
-          },
-          error: (error) => {
-            console.error(error);
-            this.alertType = 'danger';
-
-            const headerMessage =
-              error?.headers?.get('errordescription') ||
-              error?.headers?.get('statustext') ||
-              error?.statusText;
-
-            this.message =
-              headerMessage ||
-              error?.error?.ALERTA ||
-              error?.error?.message ||
-              (typeof error?.error === 'string' ? error.error : '') ||
-              error?.message ||
-              'Error al actualizar la línea';
-          },
-        });
+        this.billingService
+          .createNewLine(this.sendBill, code, newQty)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: (_res: BillOperationResponse) => {
+              this.handleDetailSuccess();
+            },
+            error: (error: HttpErrorResponse) => {
+              console.error(error);
+              this.alertType = 'danger';
+              this.message = this.getErrorMessage(
+                error,
+                'Error al actualizar la línea'
+              );
+            },
+          });
       },
-      error: (error) => {
+      error: (error: HttpErrorResponse) => {
         console.error(error);
         this.alertType = 'danger';
-
-        const headerMessage =
-          error?.headers?.get('errordescription') ||
-          error?.headers?.get('statustext') ||
-          error?.statusText;
-
-        this.message =
-          headerMessage ||
-          error?.error?.ALERTA ||
-          error?.error?.message ||
-          (typeof error?.error === 'string' ? error.error : '') ||
-          error?.message ||
-          'Error al preparar la actualización de la línea';
+        this.message = this.getErrorMessage(
+          error,
+          'Error al preparar la actualización de la línea'
+        );
       },
     });
-
-    return;
   }
 
-  this.billingService.createNewLine(this.sendBill, code, qty).subscribe({
-    next: (res: any) => {
-      this.alertType = 'success';
-      this.message = res.ALERTA || 'Línea agregada correctamente';
-      this.getBillingList();
-      this.resetDetailFormState();
-      this.closeModal('exampleModal2');
-    },
-    error: (error) => {
-      console.error(error);
-      this.alertType = 'danger';
+  private deleteDetailLine(line: number) {
+    return this.billingService
+      .removeNewLine(line, this.sendBill)
+      .pipe(takeUntil(this.destroy$));
+  }
 
-      const headerMessage =
-        error?.headers?.get('errordescription') ||
-        error?.headers?.get('statustext') ||
-        error?.statusText;
-
-      this.message =
-        headerMessage ||
-        error?.error?.ALERTA ||
-        error?.error?.message ||
-        (typeof error?.error === 'string' ? error.error : '') ||
-        error?.message ||
-        'Error al crear la línea';
-    },
-  });
-}
+  private handleDetailSuccess(): void {
+    this.getBillingList();
+    this.resetDetailFormState();
+    this.closeModal('exampleModal2');
+  }
 
   public getBillingList(): void {
-    this.billingService.getBillingList(this.sendBill).subscribe({
-      next: (res: BillingResponse) => {
-        this.billingList = res;
-        this.total = res.FACTURA?.TOTAL || 0;
-        this.sendDate = res.FACTURA?.FECHA || this.sendDate;
-        this.sendBill = res.FACTURA?.NUMERO_FACTURA?.toString() || this.sendBill;
+    this.billingService
+      .getBillingList(this.sendBill)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res: BillingResponse) => {
+          this.billingList = res;
+          this.total = res.FACTURA?.TOTAL || 0;
+          this.sendDate = res.FACTURA?.FECHA || this.sendDate;
+          this.sendBill =
+            res.FACTURA?.NUMERO_FACTURA?.toString() || this.sendBill;
 
-        if (res.ALERTA) {
-          this.alertType = 'success';
-          this.message = res.ALERTA;
-        }
-      },
-      error: (error) => {
-        console.error(error);
-        this.alertType = 'danger';
-
-        const headerMessage =
-          error?.headers?.get('errordescription') ||
-          error?.headers?.get('statustext') ||
-          error?.statusText;
-
-        this.message =
-          headerMessage ||
-          error?.error?.ALERTA ||
-          error?.error?.message ||
-          (typeof error?.error === 'string' ? error.error : '') ||
-          error?.message ||
-          'Error al traer la lista';
-      },
-    });
+          if (res.ALERTA) {
+            this.alertType = 'success';
+            this.message = res.ALERTA;
+          }
+        },
+        error: (error: HttpErrorResponse) => {
+          console.error(error);
+          this.alertType = 'danger';
+          this.message = this.getErrorMessage(error, 'Error al traer la lista');
+        },
+      });
   }
 
   public removeLine(line: number, billNumber: string): void {
-    this.billingService.removeNewLine(line, billNumber).subscribe({
-      next: (res: any) => {
-        this.alertType = 'success';
-        this.message = 'Línea eliminada correctamente';
-        this.getBillingList();
-      },
-      error: (error) => {
-        console.error(error);
-        this.alertType = 'danger';
-
-        const headerMessage =
-          error?.headers?.get('errordescription') ||
-          error?.headers?.get('statustext') ||
-          error?.statusText;
-
-        this.message =
-          headerMessage ||
-          error?.error?.ALERTA ||
-          error?.error?.message ||
-          (typeof error?.error === 'string' ? error.error : '') ||
-          error?.message ||
-          'Error al borrar la línea';
-      },
-    });
-  }
-
-  updateQuantity(item: any, event: any): void {
-
-  const newQty = Number(event.target.value);
-
-  if (!newQty || newQty < 1) {
-    this.alertType = 'warning';
-    this.message = 'La cantidad debe ser mayor que 0';
-    this.getBillingList();
-    return;
-  }
-
-  if (newQty === item.CANTIDAD) {
-    return;
-  }
-
-  this.billingService.removeNewLine(item.LINEA, this.sendBill).subscribe({
-
-    next: () => {
-      this.billingService.createNewLine(
-        this.sendBill,
-        item.CODIGO_ARTICULO,
-        newQty
-      ).subscribe({
-
-        next: () => {
-
+    this.billingService
+      .removeNewLine(line, billNumber)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (_res: BillOperationResponse) => {
           this.alertType = 'success';
-          this.message = 'Cantidad actualizada correctamente';
+          this.message = 'Línea eliminada correctamente';
           this.getBillingList();
-
         },
-
-        error: (error) => {
-
+        error: (error: HttpErrorResponse) => {
           console.error(error);
           this.alertType = 'danger';
-          this.message = 'Error al actualizar la cantidad';
-
-        }
-
+          this.message = this.getErrorMessage(error, 'Error al borrar la línea');
+        },
       });
+  }
 
-    },
+  public updateQuantity(item: BillingDetail, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const newQty = Number(input.value);
 
-    error: (error) => {
-
-      console.error(error);
-      this.alertType = 'danger';
-      this.message = 'Error al modificar la línea';
-
+    if (!newQty || newQty < 1) {
+      this.alertType = 'warning';
+      this.message = 'La cantidad debe ser mayor que 0';
+      this.getBillingList();
+      return;
     }
 
-  });
+    if (newQty === item.CANTIDAD) {
+      return;
+    }
 
-}
+    this.billingService
+      .removeNewLine(item.LINEA, this.sendBill)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (_res: BillOperationResponse) => {
+          this.billingService
+            .createNewLine(this.sendBill, item.CODIGO_ARTICULO, newQty)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+              next: (_response: BillOperationResponse) => {
+                this.alertType = 'success';
+                this.message = 'Cantidad actualizada correctamente';
+                this.getBillingList();
+              },
+              error: (error: HttpErrorResponse) => {
+                console.error(error);
+                this.alertType = 'danger';
+                this.message = this.getErrorMessage(
+                  error,
+                  'Error al actualizar la cantidad'
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          console.error(error);
+          this.alertType = 'danger';
+          this.message = this.getErrorMessage(
+            error,
+            'Error al modificar la línea'
+          );
+        },
+      });
+  }
 }
