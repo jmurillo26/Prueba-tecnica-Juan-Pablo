@@ -1,131 +1,308 @@
-<nav class="navbar navbar-expand-lg navbar-light gradient">
-  <div class="container-fluid">
-    <a class="navbar-brand"></a>
+<div class="billing-wrapper">
+  <div class="panel panel-custom">
+    <div class="panel-heading">
+      <div class="row align-items-center g-3">
+        <div class="col-md-6">
+          <h4 class="panel-title mb-0">Mantenimiento de Facturas</h4>
+          <small class="panel-subtitle">Prueba tecnica: Juan Pablo</small>
+        </div>
+
+        <div class="col-md-6">
+          <div class="header-actions">
+            <button
+              type="button"
+              class="btn btn-success btn-sm"
+              data-bs-toggle="modal"
+              data-bs-target="#exampleModal">
+              <i class="bi bi-plus-circle me-1"></i>
+              Nueva Factura
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-light btn-sm"
+              data-bs-toggle="modal"
+              data-bs-target="#exampleModal2"
+              [disabled]="!sendBill">
+              <i class="bi bi-plus-square me-1"></i>
+              Nueva Línea
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div *ngIf="message" class="mb-3">
+        <app-alert [message]="message" [type]="alertType"></app-alert>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-3">
+          <div class="summary-card">
+            <div class="summary-label">Número de factura</div>
+            <div class="summary-value">
+              {{ sendBill || '-' }}
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="summary-card">
+            <div class="summary-label">Fecha</div>
+            <div class="summary-value">
+              {{ sendDate ? (sendDate | date:'dd/MM/yyyy') : '-' }}
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="summary-card">
+            <div class="summary-label">Total factura</div>
+            <div class="summary-value">
+              ₡{{ total | number:'1.0-2' }}
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="summary-card">
+            <div class="summary-label">Estado</div>
+            <div class="summary-value">
+              {{ sendBill ? 'Activa' : 'Sin crear' }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-banner mb-3" *ngIf="!sendBill">
+        Debe crear una factura antes de agregar líneas de detalle.
+      </div>
+
+      <div *ngIf="productList; else loader" class="table-responsive">
+        <table class="table table-striped table-bordered table-hover align-middle custom-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Producto</th>
+              <th class="text-center">Cantidad</th>
+              <th class="text-end">Precio</th>
+              <th class="text-end">Total</th>
+              <th class="text-center action-col">Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr *ngIf="!billingList || !billingList.DETALLES || billingList.DETALLES.length === 0; else showTable">
+              <td colspan="6" class="text-center empty-state">
+                No hay líneas registradas para esta factura.
+              </td>
+            </tr>
+
+            <ng-template #showTable>
+              <tr *ngFor="let item of billingList.DETALLES">
+                <td>{{ item.CODIGO_ARTICULO }}</td>
+                <td>{{ item.ARTICULO }}</td>
+                <td class="text-center">
+                <input
+                  type="number"
+                  class="form-control form-control-sm qty-input"
+                  [value]="item.CANTIDAD"
+                  min="1"
+                  (change)="updateQuantity(item, $event)">
+              </td>
+                <td class="text-end">₡{{ item.PRECIO | number:'1.0-2' }}</td>
+                <td class="text-end fw-semibold">₡{{ item.TOTAL_LINEA | number:'1.0-2' }}</td>
+                <td class="text-center">
+                  <button
+                    class="btn btn-danger btn-sm"
+                    (click)="removeLine(item.LINEA, sendBill)"
+                    title="Eliminar línea">
+                    <i class="bi bi-trash3"></i>
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+          </tbody>
+        </table>
+      </div>
+
+      <ng-template #loader>
+        <div class="loader-box">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+        </div>
+      </ng-template>
+    </div>
   </div>
-</nav>
-
-
-<div class="container-fluid px-5">
-
-
-  <h1 class="display-2">Factura Britt</h1>
-  <p class="lead text-muted">
-    by Pruebas
-  </p>
-
-
-  <div *ngIf="productList; else loader" >
-    <div class="">
-      <h5>Factura <span *ngIf="sendBill" class="">{{ sendBill | uppercase }}</span> Fecha <span class="">{{sendDate | date: 'dd/MM/yy'}}</span>Total <span class="">{{total | number : '1.0'}}</span></h5>
-    </div>
-
-    <div class="">
-      <div class="">
-        <button type="button" class="btn btn-primary " data-bs-toggle="modal" data-bs-target="#exampleModal">
-          NUEVA FACTURA
-        </button>
-      </div>
-      <div class="col d-flex justify-content-start">
-        <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#exampleModal2">
-          NUEVA LINEA
-        </button>
-      </div>
-    </div>
-
-    <table class="table table-hover">
-      <thead class="table">
-        <tr>
-          <th scope="col">Sku</th>
-          <th scope="col">Producto</th>
-          <th scope="col">Total</th>
-          <th scope="col">Acción</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        <tr *ngIf="!billingList || billingList.DETALLES.length == 0; else showTable">
-          <th scope="row">-</th>
-          <td>-</td>
-          <td>-</td>
-          <td>-</td>
-        </tr>
-        <ng-template #showTable>
-          <tr *ngFor="let item of billingList.DETALLES">
-            <th scope="row">{{item.CODIGO_ARTICULO}}</th>
-            <td>{{item.ARTICULO}}</td>
-            <td>{{item.TOTAL_LINEA | number : '1.0'}}</td>
-            <td>
-              <button class="btn btn-danger" (click)="removeLine(item.LINEA, sendBill)">
-                <i class="bi bi-trash3"></i>
-              </button>
-            </td>
-          </tr>
-        </ng-template>
-      </tbody>
-    </table>
-  </div>
-
-  <ng-template #loader>
-    <div class="d-flex justify-content-center pt-10" style="min-height: 40vh">
-      <div class="spinner-border" role="status" style="width: 6rem; height: 6rem">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-    </div>
-  </ng-template>
 </div>
 
-
-<!-- Modal -->
+<!-- MODAL NUEVA FACTURA -->
 <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content custom-modal">
       <div class="modal-header">
-        <h5 class="modal-title" id="exampleModalLabel">Nueva Factura</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title" id="exampleModalLabel">Crear Factura</h5>
+        <button type="button" class="btn-close" aria-label="Close" data-bs-dismiss="modal"></button>
       </div>
+
       <div class="modal-body">
-        <form [formGroup]="formBill">
-            <label for="billNumber" class="form-label">Numero de factura</label>
-            <input type="text" class="form-control" id="billNumber" formControlName="billNumber"
-              aria-describedby="billNumber">
-            <label for="date" class="form-label">Fecha</label>
-            <input type="date" class="form-control" id="date" formControlName="date">
-        </form>
+        <div class="form-card">
+          <div class="form-card-header">
+            Información General
+          </div>
+
+          <div class="form-card-body">
+            <form [formGroup]="formBill">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label for="billNumber" class="form-label">Número de factura</label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="billNumber"
+                    formControlName="billNumber"
+                    min="1"
+                    step="1">
+
+                  <div
+                    class="text-danger mt-1"
+                    *ngIf="formBill.get('billNumber')?.hasError('required') && formBill.get('billNumber')?.touched">
+                    Es requerido y debe ser un numero entero.
+                  </div>
+
+                  <div
+                    class="text-danger mt-1"
+                    *ngIf="formBill.get('billNumber')?.hasError('pattern') && formBill.get('billNumber')?.touched">
+                    El número de factura debe ser un número entero mayor que 0.
+                  </div>
+                </div>
+
+                <div class="col-md-6">
+                  <label for="date" class="form-label">Fecha</label>
+                  <input
+                    type="date"
+                    class="form-control"
+                    id="date"
+                    formControlName="date"
+                    [max]="maxDate">
+
+                  <div
+                    class="text-danger mt-1"
+                    *ngIf="formBill.get('date')?.hasError('required') && formBill.get('date')?.touched">
+                    La fecha es requerida.
+                  </div>
+
+                  <div
+                    class="text-danger mt-1"
+                    *ngIf="formBill.get('date')?.value && formBill.get('date')?.value > maxDate && formBill.get('date')?.touched">
+                    No se permiten fechas posteriores al día de hoy.
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
+
       <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" (click)="save()">Guardar</button>
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          data-bs-dismiss="modal">
+          Cancelar
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-success"
+          (click)="save()">
+          Guardar
+        </button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Modal -->
-<div *ngIf="productList" class="modal fade" id="exampleModal2" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+<!-- MODAL NUEVA LINEA -->
+<div *ngIf="productList" class="modal fade" id="exampleModal2" tabindex="-1" aria-labelledby="exampleModalLabel2" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content custom-modal">
       <div class="modal-header">
-        <h5 class="modal-title" id="exampleModalLabel">Nueva Línea</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title" id="exampleModalLabel2">Agregar Línea de Factura</h5>
+        <button type="button" class="btn-close" aria-label="Close" data-bs-dismiss="modal"></button>
       </div>
+
       <div class="modal-body">
-        <form [formGroup]="formDetail">
-          <div class="mb-3">
-            <label for="articleCode" class="form-label">Producto</label>
-            <select class="form-select" aria-label="Default select example" formControlName="articleCode">
-              <option value="" selected>Seleccione un producto</option>
-              <option *ngFor="let item of productList.PRODUCTOS" [value]="item.CODIGO_ARTICULO">
-                {{item.DESCRIPCION}}
-              </option>
-            </select>
+        <div class="form-card">
+          <div class="form-card-header">
+            Información del Artículo
           </div>
-          <div class="mb-3">
-            <label for="qty" class="form-label">Cantidad</label>
-            <input type="number" class="form-control" id="qty" formControlName="qty">
+
+          <div class="form-card-body">
+            <form [formGroup]="formDetail">
+              <div class="row g-3">
+                <div class="col-md-8">
+                  <label for="articleCode" class="form-label">Producto</label>
+                  <select
+                    class="form-select"
+                    id="articleCode"
+                    formControlName="articleCode">
+                    <option value="">Seleccione un producto</option>
+                    <option
+                      *ngFor="let item of productList.PRODUCTOS"
+                      [value]="item.CODIGO_ARTICULO">
+                      {{ item.DESCRIPCION }}
+                    </option>
+                  </select>
+
+                  <div
+                    class="text-danger mt-1"
+                    *ngIf="formDetail.get('articleCode')?.invalid && formDetail.get('articleCode')?.touched">
+                    Debe seleccionar un producto.
+                  </div>
+                </div>
+
+                <div class="col-md-4">
+                  <label for="qty" class="form-label">Cantidad</label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="qty"
+                    formControlName="qty"
+                    min="1">
+
+                  <div
+                    class="text-danger mt-1"
+                    *ngIf="formDetail.get('qty')?.hasError('required') && formDetail.get('qty')?.touched">
+                    La cantidad es requerida.
+                  </div>
+
+                  <div
+                    class="text-danger mt-1"
+                    *ngIf="formDetail.get('qty')?.hasError('min') && formDetail.get('qty')?.touched">
+                    La cantidad debe ser mayor que 0.
+                  </div>
+                </div>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       </div>
+
       <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" (click)="sendNewLine()">
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          data-bs-dismiss="modal">
+          Cancelar
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="sendNewLine()">
           Guardar
         </button>
       </div>

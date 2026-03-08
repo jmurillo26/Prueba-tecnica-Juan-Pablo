@@ -1,21 +1,24 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
 
 @Component({
   selector: 'app-alert',
   templateUrl: './alert.component.html',
   styleUrls: ['./alert.component.css']
 })
-export class AlertComponent implements OnInit {
+export class AlertComponent implements OnChanges {
 
-  constructor() { }
+  @Input() message: string = '';
+  @Input() type: 'success' | 'danger' | 'warning' | 'info' = 'info';
 
-  @Input() message !: string;
+  visible: boolean = false;
 
-  ngOnInit(): void {
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['message'] && this.message) {
+      this.visible = true;
+    }
   }
 
-  close(): void{
-    this.message = "";
+  close(): void {
+    this.visible = false;
   }
-
 }

@@ -1,13 +1,16 @@
-<div *ngIf="message">
-  <div *ngIf=" message != 'Bad Request'" class="alert alert-success alert-dismissible fade show" role="alert">
-    <i class="bi bi-check-circle-fill"></i>
-    {{ message}}
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" (click)="close()"></button>
-  </div>
+<div *ngIf="message && visible" class="alert alert-{{ type }} alert-dismissible fade show" role="alert">
+  <i *ngIf="type === 'success'" class="bi bi-check-circle-fill me-2"></i>
+  <i *ngIf="type === 'danger'" class="bi bi-exclamation-triangle-fill me-2"></i>
+  <i *ngIf="type === 'warning'" class="bi bi-exclamation-circle-fill me-2"></i>
+  <i *ngIf="type === 'info'" class="bi bi-info-circle-fill me-2"></i>
 
-  <div *ngIf=" message == 'Bad Request'" class="alert alert-danger alert-dismissible fade show" role="alert">
-    {{ message }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" (click)="close()"></button>
-  </div>
+  {{ message }}
+
+  <button
+    type="button"
+    class="btn-close"
+    data-bs-dismiss="alert"
+    aria-label="Close"
+    (click)="close()">
+  </button>
 </div>
-
